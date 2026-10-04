@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Voice Emotion Check</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #1b1f24; --muted: #5f6b7a; --line: #e3e7ec;
+    --accent: #2f6fde; --accent-text: #ffffff; --bar: #9db8ea; --top: #2f6fde; --warn: #b3261e; --ok: #1e7a45;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #111418; --card: #1a1f25; --text: #e7ebf0; --muted: #9aa5b3; --line: #2b323b;
+            --accent: #6d9cf0; --accent-text: #0d1117; --bar: #3a5584; --top: #6d9cf0; --warn: #f2877e; --ok: #6fcf97; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: 32px 16px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  p.sub { color: var(--muted); margin: 0 0 24px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin-bottom: 16px; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  button, label.btn { font: inherit; border: 0; border-radius: 10px; padding: 12px 18px; cursor: pointer;
+                      background: var(--accent); color: var(--accent-text); font-weight: 600; }
+  button.secondary, label.btn { background: transparent; color: var(--accent); border: 1px solid var(--line); }
+  button:disabled { opacity: .5; cursor: default; }
+  button.rec { background: var(--warn); color: #fff; }
+  input[type=file] { display: none; }
+  #status { color: var(--muted); font-size: .9rem; min-height: 1.4em; margin-top: 12px; }
+  audio { width: 100%; margin-top: 12px; }
+  .emotion { font-size: 2rem; font-weight: 700; text-transform: capitalize; }
+  .meta { color: var(--muted); font-size: .9rem; }
+  .flag { display: inline-block; margin-top: 8px; padding: 4px 10px; border-radius: 999px; font-size: .85rem; font-weight: 600;
+          border: 1px solid currentColor; }
+  .bars { margin-top: 16px; display: grid; gap: 6px; }
+  .bar { display: grid; grid-template-columns: 80px 1fr 48px; gap: 8px; align-items: center; font-size: .9rem; }
+  .bar .track { background: var(--line); border-radius: 6px; height: 10px; overflow: hidden; }
+  .bar .fill { background: var(--bar); height: 100%; }
+  .bar.top .fill { background: var(--top); }
+  .bar span:last-child { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Voice Emotion Check</h1>
+  <p class="sub">Record a short voice memo (2–10 s) or upload an audio file. The model returns one of 8 emotions.</p>
+
+  <div class="card">
+    <div class="row">
+      <button id="recBtn">● Record</button>
+      <label class="btn">Upload file<input id="fileIn" type="file" accept="audio/*"></label>
+      <button id="sendBtn" class="secondary" disabled>Analyse</button>
+    </div>
+    <audio id="player" controls hidden></audio>
+    <div id="status"></div>
+  </div>
+
+  <div class="card" id="result" hidden>
+    <div class="meta">Detected emotion</div>
+    <div class="emotion" id="emo"></div>
+    <div class="meta" id="conf"></div>
+    <div class="flag" id="flag"></div>
+    <div class="bars" id="bars"></div>
+  </div>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let recorder = null, chunks = [], audioBlob = null, fileName = "memo.wav";
+
+// Browsers record webm/mp4; convert to 16 kHz mono WAV so the server needs no extra codecs.
+async function toWav16k(blob) {
+  const buf = await new AudioContext().decodeAudioData(await blob.arrayBuffer());
+  const off = new OfflineAudioContext(1, Math.ceil(buf.duration * 16000), 16000);
+  const src = off.createBufferSource(); src.buffer = buf; src.connect(off.destination); src.start();
+  const pcm = (await off.startRendering()).getChannelData(0);
+  const view = new DataView(new ArrayBuffer(44 + pcm.length * 2));
+  const w = (o, s) => [...s].forEach((c, i) => view.setUint8(o + i, c.charCodeAt(0)));
+  w(0, "RIFF"); view.setUint32(4, 36 + pcm.length * 2, true); w(8, "WAVEfmt ");
+  view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, 16000, true); view.setUint32(28, 32000, true); view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true); w(36, "data"); view.setUint32(40, pcm.length * 2, true);
+  pcm.forEach((s, i) => view.setInt16(44 + i * 2, Math.max(-1, Math.min(1, s)) * 0x7fff, true));
+  return new Blob([view], { type: "audio/wav" });
+}
+
+function ready(blob, name) {
+  audioBlob = blob; fileName = name;
+  $("player").src = URL.createObjectURL(blob); $("player").hidden = false;
+  $("sendBtn").disabled = false; $("status").textContent = "Ready - press Analyse.";
+}
+
+$("recBtn").onclick = async () => {
+  if (recorder && recorder.state === "recording") { recorder.stop(); return; }
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    recorder = new MediaRecorder(stream); chunks = [];
+    recorder.ondataavailable = e => chunks.push(e.data);
+    recorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      $("recBtn").textContent = "● Record"; $("recBtn").classList.remove("rec");
+      ready(await toWav16k(new Blob(chunks, { type: recorder.mimeType })), "memo.wav");
+    };
+    recorder.start();
+    $("recBtn").textContent = "■ Stop"; $("recBtn").classList.add("rec");
+    $("status").textContent = "Recording… speak naturally, then press Stop.";
+  } catch (e) { $("status").textContent = "Microphone not available: " + e.message; }
+};
+
+$("fileIn").onchange = e => { const f = e.target.files[0]; if (f) ready(f, f.name); };
+
+$("sendBtn").onclick = async () => {
+  $("sendBtn").disabled = true; $("status").textContent = "Analysing…";
+  const form = new FormData(); form.append("file", audioBlob, fileName);
+  try {
+    const r = await fetch("/predict", { method: "POST", body: form });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || r.statusText);
+    show(d); $("status").textContent = `Done in ${d.latency_ms} ms (${d.duration_s} s of speech).`;
+  } catch (e) { $("status").textContent = "Error: " + e.message; }
+  $("sendBtn").disabled = false;
+};
+
+function show(d) {
+  $("result").hidden = false;
+  $("emo").textContent = d.emotion;
+  $("conf").textContent = `Confidence ${(d.confidence * 100).toFixed(0)}%` +
+    (d.confidence < 0.55 ? " - low, treat as uncertain" : "");
+  const neg = d.negative_score >= 0.5;
+  $("flag").textContent = neg ? `Negative tone ${(d.negative_score * 100).toFixed(0)}% - escalate`
+                              : `Negative tone ${(d.negative_score * 100).toFixed(0)}% - no action`;
+  $("flag").style.color = neg ? "var(--warn)" : "var(--ok)";
+  const top = d.emotion;
+  $("bars").innerHTML = Object.entries(d.probabilities).sort((a, b) => b[1] - a[1]).map(([e, p]) =>
+    `<div class="bar ${e === top ? "top" : ""}"><span>${e}</span>
+       <div class="track"><div class="fill" style="width:${(p * 100).toFixed(1)}%"></div></div>
+       <span>${(p * 100).toFixed(0)}%</span></div>`).join("");
+}
+</script>
+</body>
+</html>

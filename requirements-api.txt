@@ -1,0 +1,10 @@
+# Serving only (the Docker image). torch is installed separately (CPU build) in the Dockerfile.
+transformers==4.57.1
+scikit-learn==1.6.1
+numpy>=1.26
+librosa==0.11.0
+soundfile>=0.12
+joblib>=1.3
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
