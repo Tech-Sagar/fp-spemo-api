@@ -4,75 +4,441 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Voice Emotion Check</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=Instrument+Serif&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #f6f7f9; --card: #ffffff; --text: #1b1f24; --muted: #5f6b7a; --line: #e3e7ec;
-    --accent: #2f6fde; --accent-text: #ffffff; --bar: #9db8ea; --top: #2f6fde; --warn: #b3261e; --ok: #1e7a45;
+    --bg: #eef1f5; --surface: #ffffff; --text: #1a2133; --muted: #5a6579; --line: #dde2ea;
+    --ink: #1a2133; --ink-text: #ffffff;
+    --rec: #e5484d; --warn: #c2362f; --amber: #b7791f; --ok: #1f7a4d;
+    --wave-idle: #c5ccd8;
+    --sans: "Instrument Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --serif: "Instrument Serif", Georgia, "Times New Roman", serif;
   }
   @media (prefers-color-scheme: dark) {
-    :root { --bg: #111418; --card: #1a1f25; --text: #e7ebf0; --muted: #9aa5b3; --line: #2b323b;
-            --accent: #6d9cf0; --accent-text: #0d1117; --bar: #3a5584; --top: #6d9cf0; --warn: #f2877e; --ok: #6fcf97; }
+    :root {
+      --bg: #12151c; --surface: #1a1e27; --text: #e8ebf1; --muted: #98a2b3; --line: #2a303c;
+      --ink: #e8ebf1; --ink-text: #12151c;
+      --rec: #ff6b6f; --warn: #ff8a82; --amber: #e5b455; --ok: #6fcf97;
+      --wave-idle: #3a4252;
+    }
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text);
-         font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-  main { max-width: 560px; margin: 0 auto; padding: 32px 16px; }
-  h1 { font-size: 1.5rem; margin: 0 0 4px; }
-  p.sub { color: var(--muted); margin: 0 0 24px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px; margin-bottom: 16px; }
-  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
-  button, label.btn { font: inherit; border: 0; border-radius: 10px; padding: 12px 18px; cursor: pointer;
-                      background: var(--accent); color: var(--accent-text); font-weight: 600; }
-  button.secondary, label.btn { background: transparent; color: var(--accent); border: 1px solid var(--line); }
-  button:disabled { opacity: .5; cursor: default; }
-  button.rec { background: var(--warn); color: #fff; }
-  input[type=file] { display: none; }
-  #status { color: var(--muted); font-size: .9rem; min-height: 1.4em; margin-top: 12px; }
-  audio { width: 100%; margin-top: 12px; }
-  .emotion { font-size: 2rem; font-weight: 700; text-transform: capitalize; }
-  .meta { color: var(--muted); font-size: .9rem; }
-  .flag { display: inline-block; margin-top: 8px; padding: 4px 10px; border-radius: 999px; font-size: .85rem; font-weight: 600;
-          border: 1px solid currentColor; }
-  .bars { margin-top: 16px; display: grid; gap: 6px; }
-  .bar { display: grid; grid-template-columns: 80px 1fr 48px; gap: 8px; align-items: center; font-size: .9rem; }
-  .bar .track { background: var(--line); border-radius: 6px; height: 10px; overflow: hidden; }
-  .bar .fill { background: var(--bar); height: 100%; }
-  .bar.top .fill { background: var(--top); }
-  .bar span:last-child { text-align: right; font-variant-numeric: tabular-nums; color: var(--muted); }
+  html { -webkit-text-size-adjust: 100%; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.55 var(--sans); }
+  button, input, select { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
   [hidden] { display: none !important; }
+
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 28px 20px 48px; }
+
+  /* Header */
+  .top { display: flex; justify-content: space-between; align-items: flex-end; gap: 20px; flex-wrap: wrap; }
+  h1 { font: 400 2.4rem/1.05 var(--serif); margin: 0; letter-spacing: -.01em; }
+  .top p { margin: 6px 0 0; color: var(--muted); max-width: 46ch; }
+  .controls { display: flex; gap: 14px; align-items: flex-end; flex-wrap: wrap; }
+  .field { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); }
+  select { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; min-width: 190px; color: var(--text); }
+  .settings { position: relative; }
+  .settings summary { list-style: none; cursor: pointer; border: 1px solid var(--line); background: var(--surface);
+                      border-radius: 10px; padding: 9px 14px; font-size: .95rem; }
+  .settings summary::-webkit-details-marker { display: none; }
+  .settings[open] summary { border-color: var(--ink); }
+  .pop { position: absolute; right: 0; top: calc(100% + 8px); z-index: 5; width: 300px; background: var(--surface);
+         border: 1px solid var(--line); border-radius: 12px; padding: 16px; box-shadow: 0 12px 32px rgba(10, 20, 40, .14); }
+  .pop label { display: flex; justify-content: space-between; font-weight: 500; margin-bottom: 8px; }
+  .pop input[type=range] { width: 100%; accent-color: var(--ink); }
+  .pop p { font-size: .85rem; margin: 10px 0 0; }
+
+  .blurb { margin: 22px 0 22px; padding-left: 14px; border-left: 3px solid var(--ink); max-width: 72ch; }
+  .blurb b { font-weight: 600; }
+
+  .layout { display: grid; gap: 24px; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); align-items: start; }
+  @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+  /* Stage: the one expressive element. It takes the colour of the detected emotion. */
+  .stage { --emo: var(--muted); border: 1px solid var(--line); border-radius: 24px; padding: 20px;
+           background: color-mix(in srgb, var(--emo) 11%, var(--surface)); transition: background .6s ease, border-color .6s ease; }
+  .stage.drag { border-color: var(--ink); border-style: dashed; }
+  .stage.has-emo { border-color: color-mix(in srgb, var(--emo) 45%, var(--line)); }
+  canvas { display: block; width: 100%; height: 128px; }
+  .capture { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; margin-top: 14px; }
+  .rec-btn { width: 64px; height: 64px; border-radius: 50%; border: 0; cursor: pointer; background: var(--rec);
+             display: grid; place-items: center; flex: none; position: relative; }
+  .rec-btn::before { content: ""; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: border-radius .15s; }
+  .rec-btn.on::before { border-radius: 5px; width: 20px; height: 20px; }
+  .rec-btn.on::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; border: 2px solid var(--rec); animation: ring 1.4s ease-out infinite; }
+  @keyframes ring { from { transform: scale(.9); opacity: .9; } to { transform: scale(1.25); opacity: 0; } }
+  @media (prefers-reduced-motion: reduce) { .rec-btn.on::after { animation: none; } * { transition: none !important; } }
+  .rec-text { display: grid; gap: 2px; min-width: 0; }
+  .rec-text strong { font-weight: 600; }
+  .rec-text span { color: var(--muted); font-size: .9rem; }
+  .spacer { flex: 1; }
+  .btn { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 10px 16px; cursor: pointer; font-weight: 500; }
+  .btn:hover { border-color: var(--ink); }
+  .btn.primary { background: var(--ink); color: var(--ink-text); border-color: var(--ink); }
+  .btn.small { padding: 6px 12px; font-size: .88rem; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  input[type=file] { display: none; }
+  .labelrow { margin-top: 14px; }
+  .labelrow input { width: 100%; background: color-mix(in srgb, var(--surface) 80%, transparent); border: 1px solid var(--line); border-radius: 10px; padding: 9px 12px; }
+  audio { width: 100%; margin-top: 14px; height: 36px; }
+  #status { min-height: 1.5em; margin-top: 12px; font-size: .92rem; color: var(--muted); }
+  #status.err { color: var(--warn); }
+
+  /* Result */
+  .result { margin-top: 24px; }
+  .verdict { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  .emo-word { font: 400 4.4rem/.95 var(--serif); letter-spacing: -.02em; text-transform: capitalize; color: var(--emo-c, var(--text)); }
+  .conf { min-width: 150px; text-align: right; font-size: .9rem; color: var(--muted); }
+  .conf strong { color: var(--text); font-weight: 600; }
+  .meter { height: 6px; border-radius: 4px; background: var(--line); margin-top: 6px; overflow: hidden; }
+  .meter i { display: block; height: 100%; background: var(--emo-c, var(--ink)); transition: width .6s ease; }
+
+  .action { margin-top: 18px; border-radius: 14px; padding: 14px 16px; border: 1px solid; display: grid; gap: 2px; }
+  .action.escalate { color: var(--warn); background: color-mix(in srgb, var(--warn) 9%, var(--surface)); }
+  .action.monitor { color: var(--amber); background: color-mix(in srgb, var(--amber) 10%, var(--surface)); }
+  .action.clear { color: var(--ok); background: color-mix(in srgb, var(--ok) 8%, var(--surface)); }
+  .action strong { font-weight: 600; font-size: 1.05rem; }
+  .action p { margin: 0; color: var(--text); }
+
+  .gauge { margin-top: 20px; }
+  .gauge-head { display: flex; justify-content: space-between; font-size: .9rem; color: var(--muted); }
+  .gauge-head b { color: var(--text); font-weight: 600; }
+  .gtrack { position: relative; height: 10px; border-radius: 6px; background: var(--line); margin-top: 8px; }
+  .gfill { position: absolute; inset: 0 auto 0 0; border-radius: 6px; background: var(--emo-c, var(--ink)); transition: width .6s ease; }
+  .gmark { position: absolute; top: -5px; bottom: -5px; width: 2px; background: var(--text); }
+  .gnote { font-size: .8rem; color: var(--muted); margin-top: 6px; }
+
+  .caveat { margin: 16px 0 0; font-size: .9rem; color: var(--muted); }
+  .probs { margin-top: 18px; display: grid; gap: 7px; }
+  .prob { display: grid; grid-template-columns: 84px 1fr 42px; gap: 10px; align-items: center; font-size: .9rem; }
+  .prob .t { height: 8px; background: var(--line); border-radius: 5px; overflow: hidden; }
+  .prob .f { height: 100%; border-radius: 5px; }
+  .prob span:last-child { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .prob span:first-child { text-transform: capitalize; }
+  .link { background: none; border: 0; padding: 0; margin-top: 10px; color: var(--muted); text-decoration: underline; cursor: pointer; font-size: .88rem; }
+
+  /* Insights */
+  .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 20px; }
+  .panel + .panel { margin-top: 16px; }
+  .panel h2 { font: 400 1.7rem/1.1 var(--serif); margin: 0 0 4px; }
+  .panel .sub { color: var(--muted); margin: 0 0 16px; font-size: .92rem; }
+  .kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .kpi { padding: 12px 10px 12px 0; }
+  .kpi + .kpi { padding-left: 12px; border-left: 1px solid var(--line); }
+  .kpi b { display: block; font: 400 1.8rem/1.1 var(--serif); text-transform: capitalize; }
+  .kpi span { font-size: .8rem; color: var(--muted); }
+  @media (max-width: 520px) { .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } .kpi:nth-child(3) { border-left: 0; padding-left: 0; } }
+  .chart-title { font-weight: 600; font-size: .95rem; margin: 20px 0 8px; display: flex; justify-content: space-between; gap: 8px; }
+  .chart-title span { font-weight: 400; color: var(--muted); font-size: .85rem; }
+  svg.line { width: 100%; height: auto; display: block; }
+  .mix { display: flex; height: 14px; border-radius: 7px; overflow: hidden; background: var(--line); }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: .85rem; color: var(--muted); }
+  .legend i { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 6px; }
+  .tips { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+  .tips li { padding-left: 14px; border-left: 3px solid var(--line); }
+  .empty { text-align: center; padding: 18px 8px 6px; color: var(--muted); }
+  .empty p { margin: 0 0 14px; }
+
+  .hist-tools { display: flex; gap: 8px; flex-wrap: wrap; }
+  .hist { margin-top: 14px; max-height: 300px; overflow-y: auto; border-top: 1px solid var(--line); }
+  .row { display: grid; grid-template-columns: minmax(0, 1.5fr) auto auto auto 28px; gap: 10px; align-items: center;
+         padding: 9px 2px; border-bottom: 1px solid var(--line); font-size: .9rem; }
+  .row .pick { text-align: left; background: none; border: 0; padding: 0; cursor: pointer; display: grid; min-width: 0; }
+  .row .pick:hover b { text-decoration: underline; }
+  .row .pick b { font-weight: 600; text-transform: capitalize; display: flex; align-items: center; gap: 8px; }
+  .row .pick b i { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .row .pick small { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row .num { font-variant-numeric: tabular-nums; color: var(--muted); }
+  .badge { font-size: .78rem; font-weight: 600; padding: 2px 9px; border-radius: 999px; border: 1px solid currentColor; }
+  .badge.escalate { color: var(--warn); } .badge.monitor { color: var(--amber); } .badge.clear { color: var(--ok); }
+  .x { background: none; border: 0; cursor: pointer; color: var(--muted); font-size: 1.1rem; line-height: 1; padding: 4px; border-radius: 6px; }
+  .x:hover { color: var(--warn); }
+  @media (max-width: 560px) { .row { grid-template-columns: minmax(0, 1fr) auto auto 28px; } .row .num { display: none; } }
+
+  .foot { margin-top: 32px; font-size: .85rem; color: var(--muted); max-width: 80ch; }
 </style>
 </head>
 <body>
-<main>
-  <h1>Voice Emotion Check</h1>
-  <p class="sub">Record a short voice memo (2–10 s) or upload an audio file. The model returns one of 8 emotions.</p>
+<div class="wrap">
 
-  <div class="card">
-    <div class="row">
-      <button id="recBtn">● Record</button>
-      <label class="btn">Upload file<input id="fileIn" type="file" accept="audio/*"></label>
-      <button id="sendBtn" class="secondary" disabled>Analyse</button>
+  <header class="top">
+    <div>
+      <h1>Voice Emotion Check</h1>
+      <p>Record a short clip or upload audio. Get the emotion, how sure the model is, and what to do next.</p>
     </div>
-    <audio id="player" controls hidden></audio>
-    <div id="status"></div>
+    <div class="controls">
+      <label class="field">Use case
+        <select id="scenario">
+          <option value="support">Customer support</option>
+          <option value="sales">Sales calls</option>
+          <option value="hr">Employee check-ins</option>
+          <option value="health">Patient care</option>
+        </select>
+      </label>
+      <details class="settings" id="settings">
+        <summary>Settings</summary>
+        <div class="pop">
+          <label for="thr"><span>Escalation threshold</span><span id="thrVal">50%</span></label>
+          <input id="thr" type="range" min="30" max="80" step="5" value="50">
+          <p class="meta">Clips with negative tone at or above this level are marked <b>Escalate</b>. From 60% of it up, they are marked <b>Monitor</b>. Lower it to catch more, raise it to cut false alarms.</p>
+        </div>
+      </details>
+    </div>
+  </header>
+
+  <p class="blurb" id="blurb"></p>
+
+  <div class="layout">
+    <!-- Capture + result -->
+    <main>
+      <div class="stage" id="stage">
+        <canvas id="wave" aria-label="Audio waveform"></canvas>
+        <div class="capture">
+          <button class="rec-btn" id="recBtn" aria-label="Start recording"></button>
+          <div class="rec-text">
+            <strong id="recTitle">Record a clip</strong>
+            <span id="recHint">2 to 10 seconds of natural speech works best</span>
+          </div>
+          <div class="spacer"></div>
+          <label class="btn" for="fileIn" id="uploadBtn">Upload audio</label>
+          <input id="fileIn" type="file" accept="audio/*">
+        </div>
+        <div class="labelrow">
+          <input id="clipLabel" type="text" maxlength="60" placeholder="Label this clip, such as a call ID or caller name (optional)" aria-label="Clip label">
+        </div>
+        <audio id="player" controls hidden></audio>
+        <div id="status" role="status" aria-live="polite">You can also drop an audio file anywhere on this panel.</div>
+      </div>
+
+      <section class="result" id="result" hidden>
+        <div class="verdict">
+          <div class="emo-word" id="emo"></div>
+          <div class="conf"><span id="confLabel"></span><div class="meter"><i id="confFill"></i></div></div>
+        </div>
+
+        <div class="action" id="action">
+          <strong id="actTitle"></strong>
+          <p id="actText"></p>
+        </div>
+
+        <div class="gauge">
+          <div class="gauge-head"><span>Negative tone</span><b id="negVal"></b></div>
+          <div class="gtrack"><div class="gfill" id="negFill"></div><div class="gmark" id="negMark" title="Escalation threshold"></div></div>
+          <div class="gnote" id="negNote"></div>
+        </div>
+
+        <p class="caveat" id="caveat" hidden></p>
+
+        <div class="probs" id="probs"></div>
+        <button class="link" id="probToggle" hidden></button>
+      </section>
+    </main>
+
+    <!-- Session insights -->
+    <aside>
+      <section class="panel" id="insights">
+        <h2>This session</h2>
+        <p class="sub">Updates after every clip. Nothing is uploaded or stored beyond the results in this browser.</p>
+
+        <div id="emptyState" class="empty">
+          <p>No clips yet. Record or upload one, or load sample data to see how the dashboard reads.</p>
+          <button class="btn" id="demoBtn">Load sample data</button>
+        </div>
+
+        <div id="filled" hidden>
+          <div class="kpis">
+            <div class="kpi"><b id="kN">0</b><span>Clips analysed</span></div>
+            <div class="kpi"><b id="kEsc">0%</b><span>Escalated</span></div>
+            <div class="kpi"><b id="kNeg">0%</b><span>Avg negative tone</span></div>
+            <div class="kpi"><b id="kTop">-</b><span>Most common</span></div>
+          </div>
+
+          <div class="chart-title">Negative tone over time <span id="trendNote"></span></div>
+          <svg class="line" id="timeline" viewBox="0 0 460 150" role="img" aria-label="Negative tone for each clip, in order"></svg>
+
+          <div class="chart-title">Emotion mix</div>
+          <div class="mix" id="mix"></div>
+          <div class="legend" id="legend"></div>
+        </div>
+      </section>
+
+      <section class="panel" id="tipsPanel" hidden>
+        <h2>What this suggests</h2>
+        <p class="sub">Generated from this session. Treat it as a prompt for a person to look closer.</p>
+        <ul class="tips" id="tips"></ul>
+      </section>
+
+      <section class="panel" id="histPanel" hidden>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+          <h2 style="margin:0">Clip log</h2>
+          <div class="hist-tools">
+            <button class="btn small" id="csvBtn">Export CSV</button>
+            <button class="btn small" id="clearBtn">Clear all</button>
+          </div>
+        </div>
+        <div class="hist" id="hist"></div>
+      </section>
+    </aside>
   </div>
 
-  <div class="card" id="result" hidden>
-    <div class="meta">Detected emotion</div>
-    <div class="emotion" id="emo"></div>
-    <div class="meta" id="conf"></div>
-    <div class="flag" id="flag"></div>
-    <div class="bars" id="bars"></div>
-  </div>
-</main>
+  <p class="foot">Emotion is read from tone of voice only, not from what is said, and models trained on acted speech can misread real conversations, accents and noisy audio. Use results to decide where a person should listen, never to judge a person or make a decision on its own.</p>
+</div>
 
 <script>
 const $ = id => document.getElementById(id);
-let recorder = null, chunks = [], audioBlob = null, fileName = "memo.wav";
+const pct = x => Math.round(x * 100);
+const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const reduceMotion = matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+/* ---------- Domain data ---------- */
+const EMO = {
+  neutral:   { c: "#7b8794", neg: false },
+  calm:      { c: "#3f9ea0", neg: false },
+  happy:     { c: "#d9930d", neg: false },
+  surprised: { c: "#e2763b", neg: false },
+  sad:       { c: "#4a6fa5", neg: true },
+  angry:     { c: "#d64545", neg: true },
+  fearful:   { c: "#8e5bb5", neg: true },
+  disgust:   { c: "#6f8f2a", neg: true },
+};
+const ALIAS = { fear: "fearful", surprise: "surprised", disgusted: "disgust", anger: "angry" };
+const key = e => { const k = String(e).toLowerCase(); return ALIAS[k] || k; };
+const meta = e => EMO[key(e)] || { c: "#7b8794", neg: false };
+
+const SCENARIOS = {
+  support: {
+    blurb: "<b>Customer support.</b> Spot frustrated callers early and route them to your best agents before they churn.",
+    play: {
+      angry: "Offer a senior agent or a callback now. Acknowledge the problem before explaining policy.",
+      disgust: "The customer is rejecting the experience. Apologise for the specific issue and offer a concrete fix.",
+      fearful: "Likely worried about money or safety. Slow down and confirm next steps in writing.",
+      sad: "Lead with empathy. Check whether this is a one-off or a loss of trust.",
+      happy: "Good moment to thank them and ask for a review or referral.",
+      surprised: "Something was unexpected. Ask what they expected, to head off a follow-up complaint.",
+      calm: "The call is on track. Keep the same pace.",
+      neutral: "No emotional signal. Carry on and listen for changes.",
+    },
+  },
+  sales: {
+    blurb: "<b>Sales calls.</b> See how prospects react to the pitch and the price while the conversation is still live.",
+    play: {
+      angry: "Pause the pitch. Ask what is wrong and offer to reschedule instead of pushing on.",
+      disgust: "The offer is landing badly. Drop this angle and ask about their real priorities.",
+      fearful: "Hesitating over risk. Share proof such as case studies, guarantees or a pilot.",
+      sad: "Low energy. Do not push for a close; propose a low-effort next step.",
+      happy: "Buying signal. Summarise the value and propose the next step now.",
+      surprised: "Price or scope may have caught them off guard. Check understanding before moving on.",
+      calm: "Receptive. A good time for discovery questions.",
+      neutral: "Undecided. Ask an open question to draw out their view.",
+    },
+  },
+  hr: {
+    blurb: "<b>Employee check-ins.</b> Surface stress and disengagement in voice notes so a person can follow up. A prompt to ask, never a diagnosis.",
+    play: {
+      angry: "Offer a private follow-up with their manager or HR partner within 24 hours.",
+      disgust: "Strong disapproval of something at work. Ask what, specifically, and log it.",
+      fearful: "Possible anxiety about workload, job security or safety. Offer confidential support.",
+      sad: "Possible low mood or burnout. Check in privately and share wellbeing resources.",
+      happy: "Positive engagement. Note what is working so it can be repeated.",
+      surprised: "Reaction to news. Give them room to ask questions.",
+      calm: "Settled and steady. No action needed.",
+      neutral: "No signal. Continue the check-in.",
+    },
+  },
+  health: {
+    blurb: "<b>Patient care.</b> Flag anxious or distressed patients for a clinician to review. Supports triage; it does not replace clinical judgement.",
+    play: {
+      angry: "Patient is frustrated. Acknowledge it, look at wait times and offer a clinician callback.",
+      disgust: "Discomfort with the care or process. Ask what could change.",
+      fearful: "Anxiety about symptoms or results. Slow down and confirm they understood.",
+      sad: "Possible low mood. Flag for a clinician to ask about wellbeing.",
+      happy: "Positive. Reinforce the care plan while they are receptive.",
+      surprised: "Reaction to new information. Check they understood the diagnosis or instructions.",
+      calm: "Comfortable. Proceed as planned.",
+      neutral: "No signal. Continue.",
+    },
+  },
+};
+
+/* ---------- State ---------- */
+const store = {
+  get(k, d) { try { const v = localStorage.getItem("vec." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem("vec." + k, JSON.stringify(v)); } catch {} },
+};
+let history = store.get("history", []);
+let scenario = store.get("scenario", "support");
+let threshold = store.get("threshold", 0.5);
+let current = null;           // entry currently shown in the result panel
+let showAllProbs = false;
+
+const actionFor = neg => neg >= threshold ? { k: "escalate", t: "Escalate" }
+                      : neg >= threshold * 0.6 ? { k: "monitor", t: "Monitor" }
+                      : { k: "clear", t: "No action" };
+const confBand = c => c >= 0.75 ? "High" : c >= 0.55 ? "Medium" : "Low";
+
+/* ---------- Waveform ---------- */
+const cv = $("wave"), ctx = cv.getContext("2d");
+const wave = { mode: "idle", live: [], peaks: [], color: "#7b8794", reveal: 0 };
+
+function fit() {
+  const d = window.devicePixelRatio || 1, r = cv.getBoundingClientRect();
+  cv.width = Math.round(r.width * d); cv.height = Math.round(r.height * d);
+  ctx.setTransform(d, 0, 0, d, 0, 0); draw();
+}
+function resample(a, n) {
+  if (!a.length) return new Array(n).fill(0);
+  return Array.from({ length: n }, (_, i) => a[Math.min(a.length - 1, Math.floor(i * a.length / n))]);
+}
+function draw() {
+  const w = cv.clientWidth, h = cv.clientHeight, bw = 4, gap = 3;
+  const n = Math.max(8, Math.floor((w + gap) / (bw + gap)));
+  const css = getComputedStyle(document.documentElement);
+  const idle = css.getPropertyValue("--wave-idle").trim(), rec = css.getPropertyValue("--rec").trim();
+  let data;
+  if (wave.mode === "live") { data = wave.live.slice(-n); while (data.length < n) data.unshift(0); }
+  else if (wave.mode === "static") data = resample(wave.peaks, n);
+  else data = new Array(n).fill(0);
+  ctx.clearRect(0, 0, w, h);
+  const x0 = (w - (n * (bw + gap) - gap)) / 2;
+  for (let i = 0; i < n; i++) {
+    const bh = Math.max(4, Math.max(0.04, data[i]) * h * 0.92), x = x0 + i * (bw + gap), y = (h - bh) / 2;
+    ctx.fillStyle = wave.mode === "live" ? rec : (wave.mode === "static" && i / n <= wave.reveal ? wave.color : idle);
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(x, y, bw, bh, 2); else ctx.rect(x, y, bw, bh);
+    ctx.fill();
+  }
+}
+function revealWave(color) {
+  wave.color = color;
+  if (reduceMotion) { wave.reveal = 1; draw(); return; }
+  wave.reveal = 0;
+  let t0 = null;
+  (function step(t) {
+    if (t0 === null) t0 = t;
+    wave.reveal = Math.min(1, (t - t0) / 850); draw();
+    if (wave.reveal < 1) requestAnimationFrame(step);
+  })(performance.now());
+}
+async function peaksOf(blob) {
+  try {
+    const ac = new (window.AudioContext || window.webkitAudioContext)();
+    const buf = await ac.decodeAudioData(await blob.arrayBuffer()); ac.close();
+    const ch = buf.getChannelData(0), N = 140, size = Math.max(1, Math.floor(ch.length / N)), out = []; let max = 0;
+    for (let i = 0; i < N; i++) { let m = 0; for (let j = 0; j < size; j++) { const a = Math.abs(ch[i * size + j] || 0); if (a > m) m = a; } out.push(m); if (m > max) max = m; }
+    return out.map(v => Math.sqrt(v / (max || 1)));
+  } catch { return null; }
+}
+new ResizeObserver(fit).observe(cv);
+
+/* ---------- Recording ---------- */
 // Browsers record webm/mp4; convert to 16 kHz mono WAV so the server needs no extra codecs.
 async function toWav16k(blob) {
-  const buf = await new AudioContext().decodeAudioData(await blob.arrayBuffer());
+  const ac = new (window.AudioContext || window.webkitAudioContext)();
+  const buf = await ac.decodeAudioData(await blob.arrayBuffer()); ac.close();
   const off = new OfflineAudioContext(1, Math.ceil(buf.duration * 16000), 16000);
   const src = off.createBufferSource(); src.buffer = buf; src.connect(off.destination); src.start();
   const pcm = (await off.startRendering()).getChannelData(0);
@@ -86,58 +452,272 @@ async function toWav16k(blob) {
   return new Blob([view], { type: "audio/wav" });
 }
 
-function ready(blob, name) {
-  audioBlob = blob; fileName = name;
-  $("player").src = URL.createObjectURL(blob); $("player").hidden = false;
-  $("sendBtn").disabled = false; $("status").textContent = "Ready - press Analyse.";
+const MAX_SEC = 15;
+let recorder = null, chunks = [], recStream = null, recCtx = null, raf = 0, timer = 0, recStart = 0, busy = false;
+
+function setStatus(msg, isErr) { $("status").textContent = msg; $("status").classList.toggle("err", !!isErr); }
+function setBusy(b) {
+  busy = b; $("recBtn").disabled = b; $("fileIn").disabled = b;
+  $("uploadBtn").style.opacity = b ? .5 : 1; $("uploadBtn").style.pointerEvents = b ? "none" : "auto";
 }
+const clock = ms => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; };
 
-$("recBtn").onclick = async () => {
-  if (recorder && recorder.state === "recording") { recorder.stop(); return; }
+async function startRec() {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    recorder = new MediaRecorder(stream); chunks = [];
-    recorder.ondataavailable = e => chunks.push(e.data);
-    recorder.onstop = async () => {
-      stream.getTracks().forEach(t => t.stop());
-      $("recBtn").textContent = "● Record"; $("recBtn").classList.remove("rec");
-      ready(await toWav16k(new Blob(chunks, { type: recorder.mimeType })), "memo.wav");
-    };
-    recorder.start();
-    $("recBtn").textContent = "■ Stop"; $("recBtn").classList.add("rec");
-    $("status").textContent = "Recording… speak naturally, then press Stop.";
-  } catch (e) { $("status").textContent = "Microphone not available: " + e.message; }
-};
+    recStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (e) {
+    setStatus("Microphone not available: " + e.message + ". Allow microphone access in your browser, or upload a file instead.", true); return;
+  }
+  recorder = new MediaRecorder(recStream); chunks = [];
+  recorder.ondataavailable = e => chunks.push(e.data);
+  recorder.onstop = onRecStop;
 
-$("fileIn").onchange = e => { const f = e.target.files[0]; if (f) ready(f, f.name); };
+  recCtx = new (window.AudioContext || window.webkitAudioContext)();
+  const an = recCtx.createAnalyser(); an.fftSize = 1024;
+  recCtx.createMediaStreamSource(recStream).connect(an);
+  const buf = new Uint8Array(an.fftSize); let frame = 0;
+  wave.mode = "live"; wave.live = [];
+  (function loop() {
+    an.getByteTimeDomainData(buf); let s = 0;
+    for (const v of buf) { const d = (v - 128) / 128; s += d * d; }
+    if (frame++ % 3 === 0) wave.live.push(Math.min(1, Math.sqrt(s / buf.length) * 4.5));
+    draw(); raf = requestAnimationFrame(loop);
+  })();
 
-$("sendBtn").onclick = async () => {
-  $("sendBtn").disabled = true; $("status").textContent = "Analysing…";
-  const form = new FormData(); form.append("file", audioBlob, fileName);
+  recorder.start(); recStart = Date.now();
+  $("recBtn").classList.add("on"); $("recBtn").setAttribute("aria-label", "Stop recording");
+  $("recTitle").textContent = "Recording 0:00"; $("recHint").textContent = "Press the button to stop and analyse";
+  setStatus("Listening. Speak naturally.");
+  timer = setInterval(() => {
+    const ms = Date.now() - recStart; $("recTitle").textContent = "Recording " + clock(ms);
+    if (ms >= MAX_SEC * 1000) stopRec();
+  }, 100);
+}
+function stopRec() { if (recorder && recorder.state === "recording") recorder.stop(); }
+async function onRecStop() {
+  clearInterval(timer); cancelAnimationFrame(raf);
+  recStream.getTracks().forEach(t => t.stop()); if (recCtx) recCtx.close();
+  $("recBtn").classList.remove("on"); $("recBtn").setAttribute("aria-label", "Start recording");
+  $("recTitle").textContent = "Record a clip"; $("recHint").textContent = "2 to 10 seconds of natural speech works best";
+  try { analyse(await toWav16k(new Blob(chunks, { type: recorder.mimeType })), "memo.wav"); }
+  catch (e) { wave.mode = "idle"; draw(); setStatus("Could not process the recording: " + e.message + ". Try again.", true); }
+}
+$("recBtn").onclick = () => (recorder && recorder.state === "recording") ? stopRec() : startRec();
+
+/* ---------- Upload + drag and drop ---------- */
+$("fileIn").onchange = e => { const f = e.target.files[0]; if (f) analyse(f, f.name); e.target.value = ""; };
+const stage = $("stage");
+["dragenter", "dragover"].forEach(ev => stage.addEventListener(ev, e => { e.preventDefault(); if (!busy) stage.classList.add("drag"); }));
+["dragleave", "drop"].forEach(ev => stage.addEventListener(ev, e => { e.preventDefault(); stage.classList.remove("drag"); }));
+stage.addEventListener("drop", e => {
+  const f = e.dataTransfer.files[0]; if (!f || busy) return;
+  if (!f.type.startsWith("audio/")) { setStatus("That file is not audio. Drop a WAV, MP3, M4A or similar file.", true); return; }
+  analyse(f, f.name);
+});
+
+/* ---------- Analyse ---------- */
+async function analyse(blob, name) {
+  setBusy(true); setStatus("Analysing…");
+  $("player").src = URL.createObjectURL(blob); $("player").hidden = false;
+  const peaksP = peaksOf(blob);
+  const form = new FormData(); form.append("file", blob, name);
   try {
     const r = await fetch("/predict", { method: "POST", body: form });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.detail || r.statusText);
-    show(d); $("status").textContent = `Done in ${d.latency_ms} ms (${d.duration_s} s of speech).`;
-  } catch (e) { $("status").textContent = "Error: " + e.message; }
-  $("sendBtn").disabled = false;
+    let d = {}; try { d = await r.json(); } catch {}
+    if (!r.ok) throw new Error(friendlyError(r.status, d.detail || r.statusText));
+    const peaks = await peaksP;
+    wave.mode = "static"; wave.peaks = peaks || new Array(60).fill(0.15);
+    const entry = {
+      id: Date.now() + Math.random(), ts: Date.now(), label: $("clipLabel").value.trim() || name,
+      emotion: key(d.emotion), confidence: d.confidence, neg: d.negative_score, probs: d.probabilities,
+      dur: d.duration_s, ms: d.latency_ms,
+    };
+    $("clipLabel").value = "";
+    history.push(entry); persist();
+    showResult(entry, true);
+    renderAll();
+    setStatus(`Done in ${d.latency_ms} ms` + (d.duration_s ? `, ${d.duration_s} s of speech.` : "."));
+  } catch (e) {
+    wave.mode = "idle"; draw(); setStatus(e.message, true);
+  }
+  setBusy(false);
+}
+function friendlyError(status, detail) {
+  if (status === 415) return "That file could not be read as audio. Try a WAV or MP3. (" + detail + ")";
+  if (status === 422) return "Not enough speech detected. Record again, a little closer to the microphone and at least a couple of seconds long.";
+  if (status === 400) return "The file was empty. Choose another one.";
+  return "Something went wrong: " + detail;
+}
+
+/* ---------- Result ---------- */
+function showResult(e, animate) {
+  current = e;
+  const m = meta(e.emotion), a = actionFor(e.neg), play = SCENARIOS[scenario].play;
+  $("result").hidden = false;
+  stage.style.setProperty("--emo", m.c); stage.classList.add("has-emo");
+  $("result").style.setProperty("--emo-c", m.c);
+  $("emo").textContent = e.emotion;
+  $("confLabel").innerHTML = `<strong>${confBand(e.confidence)} confidence</strong> (${pct(e.confidence)}%)`;
+  $("confFill").style.width = pct(e.confidence) + "%";
+
+  $("action").className = "action " + a.k;
+  $("actTitle").textContent = a.t;
+  $("actText").textContent = play[e.emotion] || "No playbook entry for this emotion. Use your judgement.";
+
+  $("negVal").textContent = pct(e.neg) + "%";
+  $("negFill").style.width = pct(e.neg) + "%";
+  $("negMark").style.left = `calc(${pct(threshold)}% - 1px)`;
+  $("negNote").textContent = `Marker shows your escalation threshold (${pct(threshold)}%).`;
+
+  const cav = $("caveat");
+  if (e.confidence < 0.55) { cav.hidden = false; cav.textContent = "The model is not sure about this one. Have a person listen to the clip before acting on the result."; }
+  else if (a.k === "escalate" && confBand(e.confidence) !== "High") { cav.hidden = false; cav.textContent = "Negative tone is high, but confidence is only medium. A quick listen is worth it before escalating."; }
+  else cav.hidden = true;
+
+  renderProbs();
+  if (animate) revealWave(m.c);
+}
+function renderProbs() {
+  if (!current) return;
+  const all = Object.entries(current.probs || {}).sort((a, b) => b[1] - a[1]);
+  const rows = showAllProbs ? all : all.slice(0, 3);
+  $("probs").innerHTML = rows.map(([e, p]) =>
+    `<div class="prob"><span>${esc(e)}</span><div class="t"><div class="f" style="width:${pct(p)}%;background:${meta(e).c}"></div></div><span>${pct(p)}%</span></div>`).join("");
+  $("probToggle").hidden = all.length <= 3;
+  $("probToggle").textContent = showAllProbs ? "Show top 3 only" : `Show all ${all.length} emotions`;
+}
+$("probToggle").onclick = () => { showAllProbs = !showAllProbs; renderProbs(); };
+
+/* ---------- Insights ---------- */
+function renderAll() { renderKpis(); renderTimeline(); renderMix(); renderTips(); renderHistory(); }
+
+function renderKpis() {
+  const n = history.length, has = n > 0;
+  $("emptyState").hidden = has; $("filled").hidden = !has;
+  $("tipsPanel").hidden = !has; $("histPanel").hidden = !has;
+  if (!has) return;
+  const escN = history.filter(e => e.neg >= threshold).length;
+  const avg = history.reduce((s, e) => s + e.neg, 0) / n;
+  const counts = tally();
+  const top = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+  $("kN").textContent = n; $("kEsc").textContent = pct(escN / n) + "%";
+  $("kNeg").textContent = pct(avg) + "%"; $("kTop").textContent = top;
+}
+function tally() { const c = {}; history.forEach(e => c[e.emotion] = (c[e.emotion] || 0) + 1); return c; }
+
+function renderTimeline() {
+  if (!history.length) return;
+  const pts = history.slice(-30), W = 460, H = 150, L = 34, R = 10, T = 10, B = 22;
+  const x = i => pts.length === 1 ? (L + W - R) / 2 : L + i * (W - L - R) / (pts.length - 1);
+  const y = v => T + (1 - v) * (H - T - B);
+  let s = "";
+  [0, .5, 1].forEach(v => { s += `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="var(--line)"/><text x="${L - 6}" y="${y(v) + 4}" text-anchor="end" font-size="10" fill="var(--muted)">${pct(v)}%</text>`; });
+  s += `<line x1="${L}" x2="${W - R}" y1="${y(threshold)}" y2="${y(threshold)}" stroke="var(--warn)" stroke-dasharray="5 4"/>`;
+  s += `<text x="${W - R}" y="${y(threshold) - 5}" text-anchor="end" font-size="10" fill="var(--warn)">Escalation threshold</text>`;
+  if (pts.length > 1) s += `<polyline fill="none" stroke="var(--muted)" stroke-width="1.5" points="${pts.map((e, i) => `${x(i)},${y(e.neg)}`).join(" ")}"/>`;
+  s += pts.map((e, i) => `<circle cx="${x(i)}" cy="${y(e.neg)}" r="5" fill="${meta(e.emotion).c}" stroke="var(--surface)" stroke-width="2"><title>${esc(e.label)}: ${e.emotion}, ${pct(e.neg)}% negative</title></circle>`).join("");
+  s += `<text x="${L}" y="${H - 5}" font-size="10" fill="var(--muted)">Oldest</text><text x="${W - R}" y="${H - 5}" text-anchor="end" font-size="10" fill="var(--muted)">Latest</text>`;
+  $("timeline").innerHTML = s;
+  $("trendNote").textContent = pts.length < history.length ? `last ${pts.length} clips` : "";
+}
+
+function renderMix() {
+  if (!history.length) return;
+  const c = tally(), n = history.length, rows = Object.entries(c).sort((a, b) => b[1] - a[1]);
+  $("mix").innerHTML = rows.map(([e, k]) => `<div title="${esc(e)}: ${k}" style="width:${k / n * 100}%;background:${meta(e).c}"></div>`).join("");
+  $("legend").innerHTML = rows.map(([e, k]) => `<span><i style="background:${meta(e).c}"></i>${esc(cap(e))} ${k}</span>`).join("");
+}
+
+function renderTips() {
+  const n = history.length; if (!n) return;
+  const out = [];
+  if (n < 3) out.push("Analyse at least three clips to unlock trends and recommendations.");
+  else {
+    const escN = history.filter(e => e.neg >= threshold).length;
+    out.push(`${escN} of ${n} clips (${pct(escN / n)}%) reached the escalation threshold of ${pct(threshold)}%.`);
+    const counts = tally(), [top, tc] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+    out.push(`${cap(top)} is the most common emotion (${tc} of ${n} clips).`);
+    const negs = Object.entries(counts).filter(([e]) => meta(e).neg).sort((a, b) => b[1] - a[1]);
+    if (negs.length) out.push(`${cap(negs[0][0])} accounts for the most negative clips (${negs[0][1]}).`);
+    if (n >= 6) {
+      const avg = a => a.reduce((s, e) => s + e.neg, 0) / a.length;
+      const d = avg(history.slice(-3)) - avg(history.slice(-6, -3));
+      out.push(d > 0.1 ? "Tone has turned more negative over the last three clips. Check what changed."
+             : d < -0.1 ? "Tone has improved over the last three clips."
+             : "Tone has been steady over the last six clips.");
+    }
+    const low = history.filter(e => e.confidence < 0.55).length;
+    if (low) out.push(`${low} clip${low > 1 ? "s" : ""} had low model confidence. Have a person listen to ${low > 1 ? "those" : "it"} before acting.`);
+    const live = history.filter(e => !e.demo && e.ms);
+    if (live.length) out.push(`Average analysis time is ${Math.round(live.reduce((s, e) => s + e.ms, 0) / live.length)} ms, fast enough to flag a clip while the conversation is still going.`);
+    if (escN / n >= 0.25) out.push("A quarter or more of clips are escalating. Review them together and look for a shared cause such as a policy, a product issue or wait times.");
+  }
+  $("tips").innerHTML = out.map(t => `<li>${esc(t)}</li>`).join("");
+}
+
+function renderHistory() {
+  $("hist").innerHTML = history.slice().reverse().map(e => {
+    const a = actionFor(e.neg), t = new Date(e.ts);
+    return `<div class="row">
+      <button class="pick" data-id="${e.id}" title="Show this result"><b><i style="background:${meta(e.emotion).c}"></i>${esc(e.emotion)}</b>
+        <small>${esc(e.label)} · ${t.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</small></button>
+      <span class="num">${pct(e.confidence)}% sure</span>
+      <span class="num">${pct(e.neg)}% neg</span>
+      <span class="badge ${a.k}">${a.t}</span>
+      <button class="x" data-del="${e.id}" aria-label="Delete this clip">×</button></div>`;
+  }).join("");
+}
+$("hist").addEventListener("click", ev => {
+  const pick = ev.target.closest("[data-id]"), del = ev.target.closest("[data-del]");
+  if (pick) { const e = history.find(h => String(h.id) === pick.dataset.id); if (e) { wave.mode = "idle"; draw(); showResult(e, false); window.scrollTo({ top: 0, behavior: reduceMotion ? "auto" : "smooth" }); } }
+  if (del) {
+    history = history.filter(h => String(h.id) !== del.dataset.del); persist();
+    if (current && String(current.id) === del.dataset.del) { current = null; $("result").hidden = true; stage.classList.remove("has-emo"); stage.style.removeProperty("--emo"); wave.mode = "idle"; draw(); }
+    renderAll();
+  }
+});
+
+/* ---------- Actions ---------- */
+$("clearBtn").onclick = () => {
+  if (!confirm("Remove all clips from this session?")) return;
+  history = []; persist(); current = null; $("result").hidden = true;
+  stage.classList.remove("has-emo"); stage.style.removeProperty("--emo"); $("player").hidden = true;
+  wave.mode = "idle"; draw(); renderAll(); setStatus("Session cleared.");
+};
+$("csvBtn").onclick = () => {
+  const head = ["time", "label", "emotion", "confidence", "negative_score", "action", "duration_s", "latency_ms"];
+  const q = v => `"${String(v ?? "").replace(/"/g, '""')}"`;
+  const rows = history.map(e => [new Date(e.ts).toISOString(), e.label, e.emotion, e.confidence, e.neg, actionFor(e.neg).t, e.dur, e.ms].map(q).join(","));
+  const url = URL.createObjectURL(new Blob([[head.join(","), ...rows].join("\n")], { type: "text/csv" }));
+  const a = document.createElement("a"); a.href = url; a.download = "voice-emotion-session.csv"; a.click(); URL.revokeObjectURL(url);
+};
+$("demoBtn").onclick = () => {
+  const names = Object.keys(EMO), weights = { neutral: 3, calm: 2, happy: 2, surprised: 1, sad: 1.5, angry: 2.5, fearful: 1, disgust: 1 };
+  const bag = names.flatMap(n => Array(Math.round(weights[n] * 2)).fill(n));
+  const now = Date.now(); let rnd = 7; const r = () => (rnd = (rnd * 9301 + 49297) % 233280) / 233280;
+  for (let i = 0; i < 12; i++) {
+    const emo = bag[Math.floor(r() * bag.length)], win = 0.45 + r() * 0.45;
+    const rest = names.filter(n => n !== emo).map(n => [n, r()]), tot = rest.reduce((s, x) => s + x[1], 0);
+    const probs = { [emo]: win }; rest.forEach(([n, v]) => probs[n] = v / tot * (1 - win));
+    const neg = Object.entries(probs).reduce((s, [n, p]) => s + (meta(n).neg ? p : 0), 0);
+    history.push({ id: now + i, ts: now - (12 - i) * 240000, label: "Sample clip " + (i + 1), emotion: emo, confidence: win, neg, probs, dur: 4, ms: 0, demo: true });
+  }
+  persist(); renderAll(); setStatus("Sample data loaded. Clear the session when you want to start fresh.");
 };
 
-function show(d) {
-  $("result").hidden = false;
-  $("emo").textContent = d.emotion;
-  $("conf").textContent = `Confidence ${(d.confidence * 100).toFixed(0)}%` +
-    (d.confidence < 0.55 ? " - low, treat as uncertain" : "");
-  const neg = d.negative_score >= 0.5;
-  $("flag").textContent = neg ? `Negative tone ${(d.negative_score * 100).toFixed(0)}% - escalate`
-                              : `Negative tone ${(d.negative_score * 100).toFixed(0)}% - no action`;
-  $("flag").style.color = neg ? "var(--warn)" : "var(--ok)";
-  const top = d.emotion;
-  $("bars").innerHTML = Object.entries(d.probabilities).sort((a, b) => b[1] - a[1]).map(([e, p]) =>
-    `<div class="bar ${e === top ? "top" : ""}"><span>${e}</span>
-       <div class="track"><div class="fill" style="width:${(p * 100).toFixed(1)}%"></div></div>
-       <span>${(p * 100).toFixed(0)}%</span></div>`).join("");
-}
+/* ---------- Settings + scenario ---------- */
+function persist() { store.set("history", history.slice(-100)); }
+function applyScenario() { $("blurb").innerHTML = SCENARIOS[scenario].blurb; }
+$("scenario").value = scenario; applyScenario();
+$("scenario").onchange = e => { scenario = e.target.value; store.set("scenario", scenario); applyScenario(); if (current) showResult(current, false); };
+$("thr").value = Math.round(threshold * 100); $("thrVal").textContent = pct(threshold) + "%";
+$("thr").oninput = e => {
+  threshold = e.target.value / 100; store.set("threshold", threshold); $("thrVal").textContent = pct(threshold) + "%";
+  if (current) showResult(current, false); renderAll();
+};
+document.addEventListener("click", e => { const s = $("settings"); if (s.open && !s.contains(e.target)) s.open = false; });
+
+fit(); renderAll();
 </script>
 </body>
 </html>
